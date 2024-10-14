@@ -1,0 +1,294 @@
+---
+title: "Bacillus heat profiles"
+author: "Jasmine Ahmed and Jay T. Lennon"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+header-includes:
+   - \usepackage{array}
+output: pdf_document
+geometry: margin = 2.54cm
+---
+
+# Microcalorimetry of Bacillus subtilis delta 6 on different media
+
+# Clear workspace and set directory
+
+```{r setup}
+rm(list = ls())
+knitr::opts_knit$set(root.dir=normalizePath("~/Github/symcel"))
+getwd()
+```
+
+## Load packages and functions
+
+```{r}
+require("png")
+require("dplyr")
+library("tidyverse")
+require("grid")
+require("tibble")
+require("knitr")
+require("extrafont")
+require("ggrepel");
+require("gridExtra")
+require("contrast")
+require("purrr")
+require("stringr")
+sem <- function(x) sqrt(var(x)/length(x))
+cv <- function(x) (sd(x)/mean(x))*100
+```
+
+# Load data
+
+```{r}
+data.raw <- read.csv("~/Github/symcel/data/20240430_glucose_heat.csv")
+design <- read.csv("~/Github/symcel/data/20240430_glucose_design_heat.csv")
+```
+
+# Change time
+
+```{r}
+# Change times to numeric (hours)
+time.s <- as.numeric(sub("^(\\d+):(\\d+).*", "\\1.\\2", data.raw[,1]))
+colnames(data.raw)[colnames(data.raw) == "Time..s."] <- "time"
+```
+
+
+# Time-averaging to reduce size of data frame
+
+```{r}
+# Define size of interval
+observations_per_interval <- 5 * 60 / 4  # 5 min, 60 sec/min, 4 sec per observation
+
+# Function to average a vector over each interval
+average_over_interval <- function(data_vector) {
+  time_index <- rep(1:(ceiling(length(data_vector) / observations_per_interval)), 
+    each = observations_per_interval, length.out = length(data_vector))
+  averaged_values <- tapply(data_vector, time_index, mean)
+  #return(averaged_values[time_index])
+  return(averaged_values)
+}
+
+averaged_data <- lapply(data.raw, average_over_interval)
+data <- as.data.frame(averaged_data)
+
+time.h <- data[,1]/60/60
+```
+
+
+# Create look-up table
+
+```{r}
+# This code chunk reads in the experimental design file
+# Converts 96-well plate layout into long form
+# Then creates column number reference number
+
+# Subset the design file
+media <- design[1:6,1:8]
+wells <- design[7:12,1:8]
+
+# convert 96 well plate format to long format
+media.long <- as.data.frame(pivot_longer(media, cols = everything(), 
+              names_to = "Treatment", values_to = "Value"))
+wells.long <- as.data.frame(pivot_longer(wells, cols = everything(), 
+              names_to = "Treatment", values_to = "Value"))
+
+# Create vector of column numbers
+col.vect <- seq(1, 48)
+
+# Combine into one look up table
+look.table <- data.frame(media.long[,2], wells.long[,2], col.vect)
+colnames(look.table) <- c("media", "well", "col")
+```
+
+
+# Pull out wells by treatment and make data frames
+
+```{r}
+# Following code pulls out vector of column numbers corresponding to a medium
+# Then creates a data frame with time and ODs
+# Need to add one (+1) because of how time in read in
+# Note: there are some wells with no growth that could be removed here
+
+# Blanks (PBS)
+blank.col <- look.table %>%
+  filter(media == "PBS") %>%
+  pull(col)
+blanks <- data.frame(time.h, data[, blank.col+1])
+colnames(blanks)[1] <- "time"
+
+# cDSM_0.01
+cDSM_0.01_col <- look.table %>%
+  filter(media == "0.01") %>%
+  pull(col)
+#cDSM.remove <- c(13, 25,37)
+#cDSM.col <- cDSM.col[!cDSM.col %in% cDSM.remove]
+cDSM_0.01 <- data.frame(time.h, data[, cDSM_0.01_col+1])
+colnames(cDSM_0.01)[1] <- "time"
+
+# cDSM_0.1
+cDSM_0.1_col <- look.table %>%
+  filter(media == "0.1") %>%
+  pull(col)
+cDSM_0.1 <- data.frame(time.h, data[, cDSM_0.1_col+1])
+colnames(cDSM_0.1)[1] <- "time"
+
+# cDSM_0.5
+cDSM_0.5_col <- look.table %>%
+  filter(media == "0.5") %>%
+  pull(col)
+cDSM_0.5 <- data.frame(time.h, data[, cDSM_0.5_col+1])
+colnames(cDSM_0.5)[1] <- "time"
+
+# cDSM_1
+cDSM_1_col <- look.table %>%
+  filter(media == "1") %>%
+  pull(col)
+cDSM_1 <- data.frame(time.h, data[, cDSM_1_col+1])
+colnames(cDSM_1)[1] <- "time"
+
+# cDSM_2
+cDSM_2_col <- look.table %>%
+  filter(media == "2") %>%
+  pull(col)
+cDSM_2 <- data.frame(time.h, data[, cDSM_2_col+1])
+colnames(cDSM_2)[1] <- "time"
+
+# cDSM_3.75
+cDSM_3.75_col <- look.table %>%
+  filter(media == "3.75") %>%
+  pull(col)
+cDSM_3.75 <- data.frame(time.h, data[, cDSM_3.75_col+1])
+colnames(cDSM_3.75)[1] <- "time"
+
+# cDSM_5
+cDSM_5_col <- look.table %>%
+  filter(media == "5") %>%
+  pull(col)
+cDSM_5 <- data.frame(time.h, data[, cDSM_5_col+1])
+colnames(cDSM_5)[1] <- "time"
+
+# cDSM_10
+cDSM_10_col <- look.table %>%
+  filter(media == "10") %>%
+  pull(col)
+cDSM_10 <- data.frame(time.h, data[, cDSM_10_col+1])
+colnames(cDSM_10)[1] <- "time"
+
+# Controls (media with no cells)
+cDSM_ctr_col <- look.table %>%
+  #filter(str_starts(column_name, "x_")) %>%
+  filter(str_detect(media, "NI")) %>%
+  pull(col)
+cDSM_ctr <- data.frame(time.h, data[, cDSM_ctr_col+1])
+colnames(cDSM_ctr)[1] <- "time"
+```
+
+
+# Make figure
+
+```{r}
+
+# Following line initiate location to write file
+png(filename ="~/Github/symcel/figures/Heat_20240430.png", 
+    width = 1200, height = 900, res = 96 * 2) 
+
+# Start plot 
+plot.new()
+
+# Define plotting margins
+par(mar = c(7, 7, 5, 7))
+
+# Make plot for the first blank (PBS) replicate
+plot(blanks[,1], blanks[,2], xlim = c(2, 18), 
+     ylim = c(-20, 175), type = "l", 
+     lty = 1, col = "grey", lwd = 2, ylab = "", xlab = "", 
+     cex.lab = 1.5, las = 1, yaxt = "n", xaxt = "n")
+
+# Add lines for other blank replicates (color = grey)
+# We just plotted column 2 and 1
+# Now we plot column 3 and 1, and so forth
+for(i in 3:ncol(blanks)) {
+  lines(blanks[,1], blanks[,i], col = "grey")  
+}
+
+# Add cDSM_0.01 lines
+for(i in 2:ncol(cDSM_0.01)) {
+  lines(cDSM_0.01[,1], cDSM_0.01[,i], col = "cyan")  
+}
+
+# Add cDSM_0.1 lines
+for(i in 2:ncol(cDSM_0.1)) {
+  lines(cDSM_0.1[,1], cDSM_0.1[,i], col = "blue")  
+}
+
+# Add cDSM_0.5 lines
+for(i in 2:ncol(cDSM_0.5)) {
+  lines(cDSM_0.5[,1], cDSM_0.5[,i], col = "green")  
+}
+
+# Add cDSM_1 lines
+for(i in 2:ncol(cDSM_1)) {
+  lines(cDSM_1[,1], cDSM_1[,i], col = "yellow")  
+}
+
+# Add cDSM_2 lines
+for(i in 2:ncol(cDSM_2)) {
+  lines(cDSM_2[,1], cDSM_2[,i], col = "orange")  
+}
+
+# Add cDSM_3.75 lines
+for(i in 2:ncol(cDSM_3.75)) {
+  lines(cDSM_3.75[,1], cDSM_3.75[,i], col = "red")  
+}
+
+# Add cDSM_5 lines
+for(i in 2:ncol(cDSM_5)) {
+  lines(cDSM_5[,1], cDSM_5[,i], col = "purple")  
+}
+
+# Add cDSM_10 lines
+for(i in 2:ncol(cDSM_10)) {
+  lines(cDSM_10[,1], cDSM_10[,i], col = "black")  
+}
+
+for(i in 3:ncol(cDSM_ctr)) {
+  lines(cDSM_ctr[,1], cDSM_ctr[,i], col = "brown")  
+}
+
+# Add box around plot
+box(lwd = 2)
+
+# Add axis ticks and labels
+axis(side = 2, lwd.ticks = 2, las = 1, cex.axis = 1.25, 
+     labels = c("0", "50", "100", "150"), at = c(0, 50, 100, 150))
+
+axis(side = 4, labels = F, lwd.ticks = 2, at = c(0, 50, 100, 150))
+
+axis(side = 1, lwd.ticks = 2, cex.axis = 1.25, las = 1, mgp = c(1, 1, 0),
+    labels = c("0", "5", "10", "15"), at = c(0, 5, 10, 15))
+
+axis(side = 3, labels = F, lwd.ticks = 2, las = 1, cex.axis = 1, 
+   at = c(0, 5, 10, 15))
+
+
+# Add axis labels
+mtext('Heat (μW)', side = 2, outer = TRUE, cex = 1.5, 
+      line = -3.5, adj = 0.6)
+
+mtext('Time (h)', side = 1, outer = TRUE, cex = 1.5, 
+      line = -4, adj = 0.5)
+
+# Add a legend
+legend("topleft", legend = c("blanks", "0.01", "0.1", "0.5", "1", 
+        "2", "3.8", "5", "10", "ctrl"), col = c("grey", "cyan", "blue", 
+        "green", "yellow", "orange", "red", "purple", "black", "brown"), lty = 1, 
+       cex = 1, bty = "n", bg = "transparent", seg.len = 1)
+
+# Close plot device (completes writing of file)
+dev.off()
+graphics.off()
+
+# Shows plot in R console window
+img <- readPNG("~/Github/symcel/figures/Heat_20240430.png")
+grid.raster(img)
+```

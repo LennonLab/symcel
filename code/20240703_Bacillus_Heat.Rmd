@@ -1,0 +1,332 @@
+---
+title: "Bacillus heat profiles"
+author: "Jasmine Ahmed and Jay T. Lennon"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+header-includes:
+   - \usepackage{array}
+output: pdf_document
+geometry: margin = 2.54cm
+---
+
+# Microcalorimetry of Bacillus subtilis delta 6 on different media
+
+# Clear workspace and set directory
+
+```{r setup}
+rm(list = ls())
+knitr::opts_knit$set(root.dir=normalizePath("~/Github/symcel"))
+getwd()
+```
+
+## Load packages and functions
+
+```{r}
+require("png")
+require("dplyr")
+library("tidyverse")
+require("grid")
+require("tibble")
+require("knitr")
+require("extrafont")
+require("ggrepel");
+require("gridExtra")
+require("contrast")
+require("purrr")
+require("stringr")
+require("pracma")
+sem <- function(x) sqrt(var(x)/length(x))
+cv <- function(x) (sd(x)/mean(x))*100
+```
+
+# Load data
+
+```{r}
+data.raw <- read.csv("~/Github/symcel/data/20240618_heat_jay.csv")
+design <- read.csv("~/Github/symcel/data/20240701symguide.csv")
+```
+
+# Change time
+
+```{r}
+# Change times to numeric (hours)
+time.s <- as.numeric(sub("^(\\d+):(\\d+).*", "\\1.\\2", data.raw[,1]))
+colnames(data.raw)[colnames(data.raw) == "Time..s."] <- "time"
+time.h <- data.raw[,1]/60/60
+data.unfilt <- data.frame(time.h, data.raw[,2:33])
+
+# Filter time (remove the acclimation period)
+start_time <- 2
+end_time <- 21
+data <- data.unfilt %>%
+  filter(time.h >= start_time & time.h <= end_time)
+```
+
+
+# Create look-up table
+
+```{r}
+# This code chunk reads in the experimental design file
+# Converts 96-well plate layout into long form
+# Then creates column number reference number
+
+# Subset the design file
+wells <- design[8:11,1:8]
+
+# convert 96 well plate format to long format
+wells.long <- as.data.frame(pivot_longer(wells, cols = everything(), 
+              names_to = "Wells", values_to = "Cells"))
+
+# Create vector of column numbers
+col.vect <- seq(1, dim(wells.long)[1])
+
+# Combine into one look up table
+look.table <- data.frame(wells.long[,2], col.vect)
+colnames(look.table) <- c("well", "col")
+look.table.colnames <- data.frame(look.table, colnames(data)[2:33])
+colnames(look.table.colnames) <- c("well", "col", "colname")
+```
+
+
+# Pull out wells by treatment and make data frames
+
+```{r}
+# Following code pulls out vector of column numbers corresponding to a medium
+# Then creates a data frame with time and ODs
+# Need to add one (+1) because of how time in read in
+# Note: there are some wells with no growth that could be removed here
+
+# Wild-type: delta6 (sporulator)
+wt_col1 <- look.table.colnames %>%
+  filter(well == "Delta6" & (str_detect(colname, "1") | colname %in% c("1", "2"))) %>%
+  pull(col)
+wt1 <- data.frame(data[,1], data[, wt_col1+1])
+colnames(wt1)[1] <- "time"
+
+wt_col2 <- look.table.colnames %>%
+  filter(well == "Delta6" & (str_detect(colname, "3") | colname %in% c("3", "4"))) %>%
+  pull(col)
+wt2 <- data.frame(data[,1], data[, wt_col3+1])
+colnames(wt3)[1] <- "time"
+
+# Mutant: spoIIE (non-sporulator)
+mut_col1 <- look.table.colnames %>%
+  filter(well == "spoIIe" & (str_detect(colname, "5") | colname %in% c("5", "6"))) %>%
+  pull(col)
+mut1 <- data.frame(data[,1], data[, mut_col1+1])
+colnames(mut1)[1] <- "time"
+```
+
+# Total heat production
+
+```{r}
+
+
+# Define the time interval
+start_time <- 2
+end_time <- 21
+
+
+# Column 1
+# Function to integrate a heat column over time
+integrate_heat <- function(heat) {
+  trapz(wt1_filt$time, heat)
+}
+wt1_filt <- wt1 %>%
+  filter(time >= start_time & time.h <= end_time)
+wt.1.heat <- wt1_filt %>%
+  summarise(across(2:5, integrate_heat, .names = "total_{col}"))
+
+# Column 2
+# Function to integrate a heat column over time
+integrate_heat <- function(heat) {
+  trapz(wt2_filt$time, heat)
+}
+wt2_filt <- wt2 %>%
+  filter(time >= start_time & time.h <= end_time)
+wt.2.heat <- wt2_filt %>%
+  summarise(across(2:5, integrate_heat, .names = "total_{col}"))
+wt.red <- data.frame(wt.1.heat, wt.2.heat)
+
+# Column 3
+# Function to integrate a heat column over time
+integrate_heat <- function(heat) {
+  trapz(wt3_filt$time, heat)
+}
+wt3_filt <- wt3 %>%
+  filter(time >= start_time & time.h <= end_time)
+wt.3.heat <- wt3_filt %>%
+  summarise(across(2:5, integrate_heat, .names = "total_{col}"))
+
+# Column 4
+# Function to integrate a heat column over time
+integrate_heat <- function(heat) {
+  trapz(wt4_filt$time, heat)
+}
+wt4_filt <- wt4 %>%
+  filter(time >= start_time & time.h <= end_time)
+wt.4.heat <- wt4_filt %>%
+  summarise(across(2:5, integrate_heat, .names = "total_{col}"))
+
+wt.pink <- data.frame(wt.3.heat, wt.4.heat)
+
+# Column 5
+# Function to integrate a heat column over time
+integrate_heat <- function(heat) {
+  trapz(mut5_filt$time, heat)
+}
+mut5_filt <- mut5 %>%
+  filter(time >= start_time & time.h <= end_time)
+mut5.heat <- mut5_filt %>%
+  summarise(across(2:5, integrate_heat, .names = "total_{col}"))
+
+# Column 6
+# Function to integrate a heat column over time
+integrate_heat <- function(heat) {
+  trapz(mut6_filt$time, heat)
+}
+mut6_filt <- mut6 %>%
+  filter(time >= start_time & time.h <= end_time)
+mut6.heat <- mut6_filt %>%
+  summarise(across(2:5, integrate_heat, .names = "total_{col}"))
+
+mut.blue <- data.frame(mut5.heat, mut.6.heat)
+
+
+
+
+wt.2.heat <- wt2 %>%
+  summarise(across(2:5, integrate_heat, .names = "total_{col}"))
+wt.red <- data.frame(wt.1.heat, wt.2.heat)
+
+wt.3.heat <- wt3 %>%
+  summarise(across(2:5, integrate_heat, .names = "total_{col}"))
+wt.4.heat <- wt4 %>%
+  summarise(across(2:5, integrate_heat, .names = "total_{col}"))
+wt.pink <- data.frame(wt.3.heat, wt.4.heat)
+
+mut.5.heat <- mut5 %>%
+  summarise(across(2:5, integrate_heat, .names = "total_{col}"))
+mut.6.heat <- mut6 %>%
+  summarise(across(2:5, integrate_heat, .names = "total_{col}"))
+mut.blue <- data.frame(mut.5.heat, mut.6.heat)
+
+t.test(wt.red,wt.pink) # p-value = 0.6122
+t.test(wt.red,mut.blue) # p-value = 0.5914
+t.test(wt.pink,mut.blue) # p-value = 0.413
+```
+
+
+# Make figure
+
+```{r}
+# Following line initiate location to write file
+png(filename ="~/Github/symcel/figures/Heat_20240703.png", 
+    width = 1200, height = 900, res = 96 * 2) 
+
+# Start plot 
+plot.new()
+
+# Define plotting margins
+par(mar = c(7, 7, 5, 7))
+
+# Make plot for the first wild type 
+plot(wt1[,1], wt1[,2], xlim = c(2, 22), 
+     ylim = c(-20, 130), type = "l", 
+     lty = 1, col = "red", lwd = 2, ylab = "", xlab = "", 
+     cex.lab = 1.5, las = 1, yaxt = "n", xaxt = "n")
+
+# Add lines for other wild type replicates (color = grey)
+# We just plotted column 2 and 1
+# Now we plot column 3 and 1, and so forth
+for(i in 3:ncol(wt1)) {
+  lines(wt1[,1], wt1[,i], col = "red")  
+}
+
+#Add batch C
+for(i in 2:ncol(wt2)) {
+  lines(wt2[,1], wt2[,i], col = "red", lty = 2)  
+}
+
+# Add batch D
+#for(i in 2:ncol(wt3)) {
+#  lines(wt3[,1], wt3[,i], col = "pink", lty = 1)  
+#}
+
+# Add batch E
+#for(i in 2:ncol(wt4)) {
+#  lines(wt4[,1], wt4[,i], col = "pink", lty = 2)  
+#}
+
+
+# Mutants
+
+# Add batch B
+for(i in 2:ncol(mut5)) {
+  lines(mut5[,1], mut5[,i], col = "blue", lty = 2)  
+}
+
+# Add batch C
+for(i in 2:ncol(mut6)) {
+  lines(mut6[,1], mut6[,i], col = "blue", lty = 2)  
+}
+
+# Add batch D
+#for(i in 2:ncol(mut7)) {
+#  lines(mut7[,1], mut7[,i], col = "cyan", lty = 1)  
+#}
+
+# Add batch E
+#for(i in 2:ncol(mut8)) {
+#  lines(mut8[,1], mut8[,i], col = "cyan", lty = 2)  
+#}
+
+
+
+
+
+# Add mutant lines
+for(i in 2:ncol(mut)) {
+  lines(mut[,1], mut[,i], col = "red")  
+}
+
+# Add box around plot
+box(lwd = 2)
+
+# Add axis ticks and labels
+axis(side = 2, lwd.ticks = 2, las = 1, cex.axis = 1.25, 
+     labels = c("0", "50", "100", "150"), at = c(0, 50, 100, 150))
+
+axis(side = 4, labels = F, lwd.ticks = 2, at = c(0, 50, 100, 150))
+
+axis(side = 1, lwd.ticks = 2, cex.axis = 1.25, las = 1, mgp = c(1, 1, 0),
+    labels = c("0", "5", "10", "15", "20"), at = c(0, 5, 10, 15, 20))
+
+axis(side = 3, labels = F, lwd.ticks = 2, las = 1, cex.axis = 1, 
+   at = c(0, 5, 10, 15))
+
+
+# Add axis labels
+mtext('Heat (μW)', side = 2, outer = TRUE, cex = 1.5, 
+      line = -3.5, adj = 0.6)
+
+mtext('Time (h)', side = 1, outer = TRUE, cex = 1.5, 
+      line = -4, adj = 0.5)
+
+# Add a legend
+legend("topleft", legend = c("wild type", "mutant"), col = c("grey", "red"), lty = 1, 
+       cex = 1.5, bty = "n", bg = "transparent", seg.len = 1.25)
+
+
+#legend("topleft", legend = c("blanks", "0.01", "0.1", "0.5", "1", 
+#        "2", "3.8", "5", "10", "ctrl"), col = c("grey", "cyan", "blue", 
+#        "green", "yellow", "orange", "red", "purple", "black", "brown"), lty = 1, 
+#       cex = 1, bty = "n", bg = "transparent", seg.len = 1)
+
+# Close plot device (completes writing of file)
+dev.off()
+graphics.off()
+
+# Shows plot in R console window
+img <- readPNG("~/Github/symcel/figures/Heat_20240703.png")
+grid.raster(img)
+```

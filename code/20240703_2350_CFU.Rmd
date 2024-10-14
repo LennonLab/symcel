@@ -1,0 +1,67 @@
+---
+title: "Bacillus CFU"
+author: "Jasmine Ahmed and Jay T. Lennon"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+header-includes:
+   - \usepackage{array}
+output: pdf_document
+geometry: margin = 2.54cm
+---
+
+# CFU of Bacillus subtilis: heat-treated and non-heat-treated
+
+# Clear workspace and set directory
+
+```{r setup}
+rm(list = ls())
+knitr::opts_knit$set(root.dir=normalizePath("~/Github/symcel"))
+getwd()
+```
+
+## Load packages and functions
+
+```{r}
+require("png")
+require("dplyr")
+library("tidyverse")
+require("grid")
+require("tibble")
+require("knitr")
+require("extrafont")
+require("ggrepel");
+require("gridExtra")
+require("contrast")
+require("purrr")
+require("stringr")
+require("pracma")
+sem <- function(x) sqrt(var(x)/length(x))
+cv <- function(x) (sd(x)/mean(x))*100
+```
+
+# Load data
+
+```{r}
+data.raw <- read.csv("~/Github/symcel/data/20240703_CFU.csv")
+```
+
+# Caluclate CFU
+
+```{r}
+perml <- (data.raw$CFU/data.raw$ul) * 1000 * 10^(data.raw$dilution)
+data <- data.frame(data.raw, perml)
+
+delta <- data %>%
+  filter(strain == "wt")
+
+delta.total <- delta %>%
+  filter(heat == "no.heat")
+
+delta.spore <- delta %>%
+  filter(heat == "heat")
+
+
+
+```
+
+
+

@@ -1,0 +1,267 @@
+---
+title: "Bacillus growth curves"
+author: "Jasmine Ahmed and Jay T. Lennon"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+header-includes:
+   - \usepackage{array}
+output: pdf_document
+geometry: margin = 2.54cm
+---
+
+# Growth curves of Bacillus subtilis delta 6 on CDSM with different glucose concentraitons
+
+# Clear workspace and set directory
+
+```{r setup}
+rm(list = ls())
+knitr::opts_knit$set(root.dir=normalizePath("~/Github/symcel"))
+getwd()
+```
+
+## Load packages and functions
+
+```{r}
+require("png")
+require("dplyr")
+library("tidyverse")
+require("grid")
+require("tibble")
+require("knitr")
+require("extrafont")
+require("ggrepel");
+require("gridExtra")
+require("contrast")
+sem <- function(x) sqrt(var(x)/length(x))
+cv <- function(x) (sd(x)/mean(x))*100
+```
+
+# Load data
+
+```{r}
+data <- read.csv("~/Github/symcel/data/20240430_glucose_OD.csv")
+design <- read.csv("~/Github/symcel/data/20240430_glucose_design_OD.csv")
+```
+
+# Change time
+
+```{r}
+# Change times to numeric (hours)
+time <- as.numeric(sub("^(\\d+):(\\d+).*", "\\1.\\2", data$Time))
+```
+
+# Create look-up table
+
+```{r}
+# This code chunk reads in the experimental design file
+# Converts 96-well plate layout into long form
+# Then creates column number reference number
+
+# Subset the design file
+media <- design[1:8,1:12]
+wells <- design[9:16,1:12]
+
+# convert 96 well plate format to long format
+media.long <- as.data.frame(pivot_longer(media, cols = everything(), 
+              names_to = "Treatment", values_to = "Value"))
+wells.long <- as.data.frame(pivot_longer(wells, cols = everything(), 
+              names_to = "Treatment", values_to = "Value"))
+
+# Create vector of column numbers
+col.vect <- seq(1, 96)
+
+# Combine into one look up table
+look.table <- data.frame(media.long[,2], wells.long[,2], col.vect)
+colnames(look.table) <- c("media", "well", "col")
+```
+
+
+# Pull out wells by treatment and make data frames
+
+```{r}
+# Following code pulls out vector of column numbers corresponding to a medium
+# Then creates a data frame with time and ODs
+# Need to add one (+1) because of how time in read in
+# Note: there are some wells with no growth that could be removed here
+
+# Blanks (PBS)
+blank.col <- look.table %>%
+  filter(media == "PBS") %>%
+  pull(col)
+blanks <- data.frame(time, data[, blank.col+1])
+colnames(blanks)[1] <- "time"
+
+# cDSM_0.01
+cDSM_0.01.col <- look.table %>%
+  filter(media == "0.01") %>%
+  pull(col)
+
+# Remove wells with anomalously low growth: 
+# B1 (13)
+# C1 (25)
+# D1 (37)
+# cDSM.remove <- c(13, 25,37)
+# cDSM.col <- cDSM.col[!cDSM.col %in% cDSM.remove]
+
+cDSM_0.01 <- data.frame(time, data[, cDSM_0.01.col+1])
+colnames(cDSM_0.01)[1] <- "time"
+
+# cDSM_0.1
+cDSM_0.1.col <- look.table %>%
+  filter(media == "0.1") %>%
+  pull(col)
+
+cDSM_0.1 <- data.frame(time, data[, cDSM_0.1.col+1])
+colnames(cDSM_0.1)[1] <- "time"
+
+# cDSM_0.5
+cDSM_0.5.col <- look.table %>%
+  filter(media == "0.5") %>%
+  pull(col)
+
+cDSM_0.5 <- data.frame(time, data[, cDSM_0.5.col+1])
+colnames(cDSM_0.5)[1] <- "time"
+
+# cDSM_1
+cDSM_1.col <- look.table %>%
+  filter(media == "1") %>%
+  pull(col)
+
+cDSM_1 <- data.frame(time, data[, cDSM_1.col+1])
+colnames(cDSM_1)[1] <- "time"
+
+# cDSM_2
+cDSM_2.col <- look.table %>%
+  filter(media == "2") %>%
+  pull(col)
+
+cDSM_2 <- data.frame(time, data[, cDSM_2.col+1])
+colnames(cDSM_2)[1] <- "time"
+
+# cDSM_3.75
+cDSM_3.75.col <- look.table %>%
+  filter(media == "3.75") %>%
+  pull(col)
+
+cDSM_3.75 <- data.frame(time, data[, cDSM_3.75.col+1])
+colnames(cDSM_3.75)[1] <- "time"
+
+# cDSM_5
+cDSM_5.col <- look.table %>%
+  filter(media == "5") %>%
+  pull(col)
+
+cDSM_5 <- data.frame(time, data[, cDSM_5.col+1])
+colnames(cDSM_5)[1] <- "time"
+
+# cDSM_10
+cDSM_10.col <- look.table %>%
+  filter(media == "10") %>%
+  pull(col)
+
+cDSM_10 <- data.frame(time, data[, cDSM_10.col+1])
+colnames(cDSM_10)[1] <- "time"
+```
+
+
+# Make figure
+
+```{r}
+
+# Following line initiate location to write file
+png(filename ="~/Github/symcel/figures/Growth_20240427.png", 
+    width = 1200, height = 900, res = 96 * 2) 
+
+# Start plot 
+plot.new()
+
+# Define plotting margins
+par(mar = c(7, 7, 5, 7))
+
+# Make plot for the first blank (PBS) replicate
+plot(blanks[,1], blanks[,2], xlim = c(-1, 17), 
+     ylim = c(0, 0.9), type = "l", 
+     lty = 1, col = "grey", lwd = 2, ylab = "", xlab = "", 
+     cex.lab = 1.5, las = 1, yaxt = "n", xaxt = "n")
+
+# Add lines for other blank replicates (color = grey)
+# We just plotted column 2 and 1
+# Now we plot column 3 and 1, and so forth
+for(i in 3:ncol(blanks)) {
+  lines(blanks[,1], blanks[,i], col = "grey")  
+}
+
+# Add cDSM_0.01 lines
+for(i in 2:ncol(cDSM_0.01)) {
+  lines(cDSM_0.01[,1], cDSM_0.01[,i], col = "cyan")  
+}
+
+# Add cDSM_0.1 lines
+for(i in 2:ncol(cDSM_0.1)) {
+  lines(cDSM_0.1[,1], cDSM_0.1[,i], col = "blue")  
+}
+
+# Add cDSM_0.5 lines
+for(i in 2:ncol(cDSM_0.5)) {
+  lines(cDSM_0.5[,1], cDSM_0.5[,i], col = "green")  
+}
+
+# Add cDSM_1 lines
+for(i in 2:ncol(cDSM_1)) {
+  lines(cDSM_1[,1], cDSM_1[,i], col = "yellow")  
+}
+
+# Add cDSM_2 lines
+for(i in 2:ncol(cDSM_2)) {
+  lines(cDSM_2[,1], cDSM_2[,i], col = "orange")  
+}
+
+# Add cDSM_3.75 lines
+for(i in 2:ncol(cDSM_3.75)) {
+  lines(cDSM_3.75[,1], cDSM_3.75[,i], col = "red")  
+}
+
+# Add cDSM_5 lines
+for(i in 2:ncol(cDSM_5)) {
+  lines(cDSM_5[,1], cDSM_5[,i], col = "purple")  
+}
+
+# Add cDSM_10 lines
+for(i in 2:ncol(cDSM_10)) {
+  lines(cDSM_10[,1], cDSM_10[,i], col = "black")  
+}
+
+# Add box around plot
+box(lwd = 2)
+
+# Add axis ticks and labels
+axis(side = 2, lwd.ticks = 2, las = 1, cex.axis = 1.25, 
+     labels = c("0.0", "0.2", "0.4", "0.6", "0.8"), at = c(0, 0.2, 0.4, 0.6, 0.8))
+
+axis(side = 4, labels = F, lwd.ticks = 2, at = c(0, 0.2, 0.4, 0.6, 0.8))
+
+axis(side = 1, lwd.ticks = 2, cex.axis = 1.25, las = 1, mgp = c(1, 1, 0),
+    labels = c("0", "5", "10", "15"), at = c(0, 5, 10, 15))
+
+axis(side = 3, labels = F, lwd.ticks = 2, las = 1, cex.axis = 1, 
+   at = c(0, 5, 10, 15))
+
+# Add axis labels
+mtext('Biomass (OD600)', side = 2, outer = TRUE, cex = 1.5, 
+      line = -3.5, adj = 0.6)
+
+mtext('Time (h)', side = 1, outer = TRUE, cex = 1.5, 
+      line = -4, adj = 0.5)
+
+# Add a legend
+legend("topleft", legend = c("blanks", "0.01", "0.1", "0.5", "1", "2", "3.8", "5", "10"), 
+       col = c("grey", "cyan", "blue", "green", "yellow", "orange", "red", "purple", "black"), lty = 1, 
+       cex = 1, bty = "n", bg = "transparent", seg.len = 1)
+
+# Close plot device (completes writing of file)
+dev.off()
+graphics.off()
+
+# Shows plot in R console window
+img <- readPNG("~/Github/symcel/figures/Growth_20240427.png")
+grid.raster(img)
+```
