@@ -1,0 +1,546 @@
+---
+title: "Bacillus growth curves"
+author: "Jasmine Ahmed and Jay T. Lennon"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+header-includes:
+   - \usepackage{array}
+output: pdf_document
+geometry: margin = 2.54cm
+---
+
+# Bacillus subtilis wild type and mutant in DSM: OD, heat, and CFU
+
+# Clear workspace and set directory
+
+```{r setup}
+rm(list = ls())
+setwd("~/GitHub/symcel/")
+getwd()
+```
+
+## Load packages and functions
+
+```{r}
+require("png")
+require("dplyr")
+library("tidyverse")
+require("grid")
+require("tibble")
+require("knitr")
+require("extrafont")
+require("ggrepel");
+require("gridExtra")
+require("contrast")
+sem <- function(x) sqrt(var(x)/length(x))
+cv <- function(x) (sd(x)/mean(x))*100
+```
+
+# Load OD data
+
+```{r}
+data.od <- read.csv("data/20240715_OD.csv")
+design.od <- read.csv("data/20240715_OD_design.csv")
+```
+
+# Change time for OD data
+
+```{r}
+# Change times to numeric (hours)
+time <- as.numeric(sub("^(\\d+):(\\d+).*", "\\1.\\2", data.od$Time))
+unfilt.data.od <- data.frame(time, data.od[, 2:97])
+start_time <- 1
+end_time <- 24
+data.od <- unfilt.data.od %>%
+  filter(time >= start_time & time <= end_time)
+```
+
+# Create look-up table for OD
+
+```{r}
+# This code chunk reads in the experimental design file
+# Converts 96-well plate layout into long form
+# Then creates column number reference number
+
+# Subset the design file
+treat.od <- design.od[1:8,1:12]
+wells.od <- design.od[9:16,1:12]
+
+# convert 96 well plate format to long format
+treat.long.od <- as.data.frame(pivot_longer(treat.od, cols = everything(), 
+              names_to = "Treatment", values_to = "Value"))
+wells.long.od <- as.data.frame(pivot_longer(wells.od, cols = everything(), 
+              names_to = "Treatment", values_to = "Value"))
+
+# Create vector of column numbers
+col.vect.od <- seq(1, 96)
+
+# Combine into one look up table
+look.table.od <- data.frame(treat.long.od[,2], wells.long.od[,2], col.vect.od)
+colnames(look.table.od) <- c("treat", "well", "col")
+```
+
+
+# Pull out wells by treatment and make OD data frames
+
+```{r}
+# Following code pulls out vector of column numbers corresponding to a medium
+# Then creates a data frame with time and ODs
+# Need to add one (+1) because of how time in read in
+# Note: there are some wells with no growth that could be removed here
+
+# Blanks (empty)
+blank.col <- look.table.od %>%
+  filter(treat == "none") %>%
+  pull(col)
+blank <- data.frame(data.od[,1], data.od[, blank.col+1])
+colnames(blank)[1] <- "time"
+
+# PBS (no cell, no media control)
+pbs.col <- look.table.od %>%
+  filter(treat == "pbs") %>%
+  pull(col)
+pbs <- data.frame(data.od[,1], data.od[, pbs.col+1])
+colnames(pbs)[1] <- "time"
+
+# DSM (no cell, media control)
+dsm.col <- look.table.od %>%
+  filter(treat == "dsm") %>%
+  pull(col)
+dsm <- data.frame(data.od[,1], data.od[, dsm.col+1])
+colnames(dsm)[1] <- "time"
+
+# B. subtilis sporulating wild type
+wt.col <- look.table.od %>%
+  filter(treat == "delta") %>%
+  pull(col)
+wt.od <- data.frame(data.od[,1], data.od[, wt.col+1])
+colnames(wt.od)[1] <- "time"
+
+# B. subtilis non-sporulating mutant
+mut.col <- look.table.od %>%
+  filter(treat == "spo") %>%
+  pull(col)
+mut.od <- data.frame(data.od[,1], data.od[, mut.col+1])
+colnames(mut.od)[1] <- "time"
+```
+
+# Make OD figure
+
+```{r}
+# Following line initiate location to write file
+png(filename ="figures/Growth_20240716.png", width = 1200, height = 1200, res = 96 * 2) 
+
+# Start plot 
+plot.new()
+
+# Define plotting margins
+par(mar = c(7, 7, 5, 7))
+
+# Make plot for the first wild type sporulator
+plot(wt.od[,1], wt.od[,2], xlim = c(0, 25), 
+     ylim = c(0, 1.5), type = "l", 
+     lty = 1, col = "blue", lwd = 2, ylab = "", xlab = "", 
+     cex.lab = 1.5, las = 1, yaxt = "n", xaxt = "n")
+
+# Add lines for other blank replicates (color = grey)
+# We just plotted column 2 and 1
+# Now we plot column 3 and 1, and so forth
+for(i in 3:ncol(wt.od)) {
+  lines(wt.od[,1], wt.od[,i], col = "blue")  
+}
+
+# Add non-sporulator lines
+# this time plot column 2 and 1, and so forth
+for(i in 2:ncol(mut.od)) {
+  lines(mut.od[,1], mut.od[,i], col = "red")  
+}
+
+# Add box around plot
+box(lwd = 2)
+
+# Add axis ticks and labels
+axis(side = 2, lwd.ticks = 2, las = 1, cex.axis = 1.25, 
+     labels = c("0", "0.5", "1.0", "1.5"), at = c(0, 0.5, 1, 1.5))
+
+axis(side = 4, labels = F, lwd.ticks = 2, at = c(0, 0.5, 1, 1.5))
+
+axis(side = 1, lwd.ticks = 2, cex.axis = 1.25, las = 1, mgp = c(1, 1, 0),
+    labels = c("0", "5", "10", "15", "20", "25"), at = c(0, 5, 10, 15, 20, 25))
+
+axis(side = 3, labels = F, lwd.ticks = 2, las = 1, cex.axis = 1, 
+   at = c(0, 5, 10, 15, 25))
+
+
+# Add axis labels
+mtext('Biomass (OD600)', side = 2, outer = TRUE, cex = 1.5, 
+      line = -3.5, adj = 0.55)
+
+mtext('Time (h)', side = 1, outer = TRUE, cex = 1.5, 
+      line = -4, adj = 0.5)
+
+# Add a legend
+legend("topright", legend = c("sporulator", "non-sporulator"), col = c("blue", "red"), lty = 1, 
+       cex = 1.5, bty = "n", bg = "transparent", seg.len = 1.25, lwd = 1.25)
+
+
+# Close plot device (completes writing of file)
+dev.off()
+graphics.off()
+
+# Shows plot in R console window
+img <- readPNG("figures/Growth_20240716.png")
+grid.raster(img)
+```
+
+
+# Load heat data
+
+```{r}
+data.ht <- read.csv("data/20240715_symcel.csv")
+design.ht <- read.csv("data/20240715_symcelll_design.csv")
+```
+
+# Change time for heat data
+
+```{r}
+# Change times to numeric (hours)
+time.s <- as.numeric(sub("^(\\d+):(\\d+).*", "\\1.\\2", data.ht[,1]))
+colnames(data.ht)[colnames(data.ht) == "Time..s."] <- "time"
+time.h <- data.ht[,1]/60/60
+unfilt.data.ht <- data.frame(time.h, data.ht[,2:48])
+# Filter time (remove the acclimation period)
+start_time <- 1
+end_time <- 25
+data.ht <- unfilt.data.ht %>%
+  filter(time.h >= start_time & time.h <= end_time)
+```
+
+# Create look-up table for heat
+
+```{r}
+# This code chunk reads in the experimental design file
+# Converts 96-well plate layout into long form
+# Then creates column number reference number
+
+# Subset the design file
+treat.ht <- design.ht[1:6,1:8]
+wells.ht <- design.ht[7:12,1:8]
+
+# convert 96 well plate format to long format
+treat.long.ht <- as.data.frame(pivot_longer(treat.ht, cols = everything(), 
+              names_to = "Treatment", values_to = "Value"))
+wells.long.ht <- as.data.frame(pivot_longer(wells.ht, cols = everything(), 
+              names_to = "Treatment", values_to = "Value"))
+
+# Create vector of column numbers
+col.vect.ht <- seq(1, 48)
+
+# Combine into one look up table
+look.table.ht <- data.frame(treat.long.ht[,2], wells.long.ht[,2], col.vect.ht)
+colnames(look.table.ht) <- c("treat", "well", "col")
+```
+
+
+# Pull out wells by treatment and make data frames for heat
+
+```{r}
+# Following code pulls out vector of column numbers corresponding to a medium
+# Then creates a data frame with time and ODs
+# Need to add one (+1) because of how time in read in
+# Note: there are some wells with no growth that could be removed here
+
+# Reference cells
+#ref.col <- look.table.ht %>%
+#  filter(treat == "reference") %>%
+#  pull(col)
+#ref <- data.frame(data.ht[,1], data.ht[, ref.col+1])
+#colnames(ref)[1] <- "time"
+
+# B. subtilis sporulating wild type
+wt.col <- look.table.ht %>%
+  filter(treat == "delta") %>%
+  pull(col)
+
+# Remove wells with no growth
+# B8 (16)
+# C8 (24)
+# B7 (15)
+# C7 (23)
+
+wt.remove <- c(15, 16, 23, 24)
+wt.col <- wt.col[!wt.col %in% wt.remove]
+
+wt.ht <- data.frame(data.ht[,1], data.ht[, wt.col+1])
+colnames(wt.ht)[1] <- "time"
+
+# B. subtilis non-sporulating mutant
+mut.col <- look.table.ht %>%
+  filter(treat == "spo") %>%
+  pull(col)
+
+# Remove wells with no growth
+# D7 (31)
+# D8 (32)
+# E7 (39)
+# E8 (40)
+
+mut.remove <- c(31, 32, 39, 40)
+mut.col <- mut.col[!mut.col %in% mut.remove]
+
+mut.ht <- data.frame(data.ht[,1], data.ht[, mut.col+1])
+colnames(mut.ht)[1] <- "time"
+```
+
+# Make heat figure
+
+```{r}
+# Following line initiate location to write file
+png(filename ="figures/Heat_20240716.png", 
+    width = 1200, height = 1200, res = 96 * 2) 
+
+# Start plot 
+plot.new()
+
+# Define plotting margins
+par(mar = c(7, 7, 5, 7))
+
+# Make plot for the first wild type sporulator
+plot(wt.ht[,1], wt.ht[,2], xlim = c(0, 25), 
+     ylim = c(-30, 50), type = "l", 
+     lty = 1, col = "blue", lwd = 2, ylab = "", xlab = "", 
+     cex.lab = 1.5, las = 1, yaxt = "n", xaxt = "n")
+
+# Add lines for other blank replicates (color = grey)
+# We just plotted column 2 and 1
+# Now we plot column 3 and 1, and so forth
+for(i in 3:ncol(wt.ht)) {
+  lines(wt.ht[,1], wt.ht[,i], col = "blue")  
+}
+
+# Add non-sporulator lines
+# this time plot column 2 and 1, and so forth
+for(i in 2:ncol(mut.ht)) {
+  lines(mut.ht[,1], mut.ht[,i], col = "red")  
+}
+
+# Add box around plot
+box(lwd = 2)
+
+# Add axis ticks and labels
+axis(side = 2, lwd.ticks = 2, las = 1, cex.axis = 1.25, 
+     labels = c("-25", "0", "25", "50"), at = c(-25, 0, 25, 50))
+
+axis(side = 4, labels = F, lwd.ticks = 2, at = c(-25, 0, 25, 50))
+
+axis(side = 1, lwd.ticks = 2, cex.axis = 1.25, las = 1, mgp = c(1, 1, 0),
+    labels = c("0", "5", "10", "15", "20", "25"), at = c(0, 5, 10, 15, 20, 25))
+
+axis(side = 3, labels = F, lwd.ticks = 2, las = 1, cex.axis = 1, 
+   at = c(0, 5, 10, 15, 25))
+
+
+# Add axis labels
+mtext('Heat (μW)', side = 2, outer = TRUE, cex = 1.5, 
+      line = -3.5, adj = 0.55)
+
+mtext('Time (h)', side = 1, outer = TRUE, cex = 1.5, 
+      line = -4, adj = 0.5)
+
+# Add a legend
+legend("topright", legend = c("sporulator", "non-sporulator"), col = c("blue", "red"), lty = 1, 
+       cex = 1.5, bty = "n", bg = "transparent", seg.len = 1.25, lwd = 1.5)
+
+
+# Close plot device (completes writing of file)
+dev.off()
+graphics.off()
+
+# Shows plot in R console window
+img <- readPNG("figures/Heat_20240716.png")
+grid.raster(img)
+```
+
+# Load CFU data
+
+```{r}
+cfu.raw <- read.csv("data/20240811_CFU.csv")
+colnames(cfu.raw)[1] <- "time"
+```
+
+# Calculate CFU/mL
+```{r}
+cfu <- cfu.raw %>%
+  mutate(cfu.ml.2 = ((cfu.raw$cfu.2/cfu.raw$vol) * 1000)/ 10^-2) %>%
+  mutate(cfu.ml.3 = ((cfu.raw$cfu.3/cfu.raw$vol) * 1000)/ 10^-3) %>%
+  mutate(cfu.ml.4 = ((cfu.raw$cfu.4/cfu.raw$vol) * 1000)/ 10^-4) %>%
+  mutate(cfu.ml.5 = ((cfu.raw$cfu.4/cfu.raw$vol) * 1000)/ 10^-5)
+
+# For WT heat-treated, use cfu.ml.2 to estimate spore densities. 
+# For all other samples, use cfu.ml.4
+```
+
+# Are there any spores in the mutant strain?
+```{r}
+mut.spore <- cfu %>% 
+  filter(strain == "mutant", heat == "yes") %>%
+  summarise(
+    sum.10_2 = sum(cfu.ml.2, na.rm = TRUE),
+    sum.10_3 = sum(cfu.ml.3, na.rm = TRUE),
+    sum.10_4 = sum(cfu.ml.4, na.rm = TRUE),
+    sum.10_5 = sum(cfu.ml.4, na.rm = TRUE)
+  )
+# Answer = no spores recovered after heat treatment
+```
+
+# Data for time series
+```{r}
+# wild type vegetative cells
+wt.veg <- cfu %>%
+  filter(strain == "wt", heat == "no") %>%
+  select(time, rep, cfu.ml.4)
+
+wt.veg.sum <- wt.veg %>%
+  group_by(time) %>%
+  summarise(
+    mean.cfu = mean(cfu.ml.4, na.rm = TRUE),
+    count = n(),  # Count the number of observations per group
+    sem.cfu = ifelse(count > 1, sd(c(cfu.ml.4, na.rm = TRUE)) / sqrt(count), NA)
+  )
+
+# wild type spores
+wt.spore.early <- cfu %>%
+  filter(strain == "wt", heat == "yes", time >= 0, time <= 6) %>%
+  select(time, rep, cfu.ml.2)
+colnames(wt.spore.early)[3] <- "cfu.ml"
+
+wt.spore.late <- cfu %>%
+  filter(strain == "wt", heat == "yes", time >= 7, time <= 13)  %>%
+  select(time, rep, cfu.ml.4)
+colnames(wt.spore.late)[3] <- "cfu.ml"
+
+wt.spore <- rbind(wt.spore.early, wt.spore.late)
+  
+wt.spore.sum <- wt.spore %>%
+  group_by(time) %>%
+  summarise(
+    mean.cfu = mean(cfu.ml, na.rm = TRUE),
+    count = n(),  # Count the number of observations per group
+    sem.cfu = ifelse(count > 1, sd(c(cfu.ml, na.rm = TRUE)) / sqrt(count), NA)
+  )
+
+# Filter out points with mean.cfu of 0
+wt.spore.filt <- wt.spore.sum %>%
+  filter(mean.cfu > 0)
+
+# mutant vegetative cells
+mut.veg <- cfu %>%
+  filter(strain == "mutant", heat == "no") %>%
+  select(time, rep, cfu.ml.4) 
+
+mut.veg.sum <- mut.veg %>%
+  group_by(time) %>%
+  summarise(
+    mean.cfu = mean(cfu.ml.4, na.rm = TRUE),
+    count = n(),  # Count the number of observations per group
+    sem.cfu = ifelse(count > 1, sd(c(cfu.ml.4, na.rm = TRUE)) / sqrt(count), NA)
+  )
+
+
+# sporulation efficiency
+spore.efficiency <- ifelse(wt.spore$cfu.ml == 0, NA, wt.spore$cfu.ml / wt.veg$cfu.ml)
+
+mean.spore.efficiency <- mean(spore.efficiency,  na.rm = TRUE)
+```
+
+# Make heat figure
+
+```{r}
+# Following line initiate location to write file
+png(filename ="figures/CFU_20240811.png", 
+    width = 1200, height = 1200, res = 96 * 2) 
+
+# Start plot 
+plot.new()
+
+# Define plotting margins
+par(mar = c(7, 7, 5, 7))
+
+# Make plot for wild type vegetative cells
+plot(wt.veg.sum$time, wt.veg.sum$mean.cfu, xlim = c(-2, 17), 
+     ylim = c(1e7, 3e8), type = "l", 
+     lty = 1, col = "blue", lwd = 2, ylab = "", xlab = "", 
+     cex.lab = 1.5, las = 1, yaxt = "n", xaxt = "n", log = "y")
+
+# Add points (symbols) on the line
+points(wt.veg.sum$time, wt.veg.sum$mean.cfu, pch = 16, col = "blue") 
+#arrows(x0 = wt.veg.sum$inc.time, y0 = wt.veg.sum$mean.cfu, 
+#       y1 = wt.veg.sum$mean.cfu + wt.veg.sum$sem.cfu, 
+#       angle = 90, length = 0.1, lwd = 2, col = "blue")
+#arrows(x0 = wt.veg.sum$inc.time, y0 = wt.veg.sum$mean.cfu, 
+#       y1 = wt.veg.sum$mean.cfu - wt.veg.sum$sem.cfu, 
+#       angle = 90, length = 0.1, lwd = 2, col = "blue")
+
+# Make plot for wild type spores
+lines(wt.spore.filt$time, wt.spore.filt$mean.cfu, 
+      col = "lightblue", lty = 1, lwd = 2)
+points(wt.spore.filt$time, wt.spore.filt$mean.cfu, pch = 16, col = "lightblue") 
+#arrows(x0 = wt.spore.sum$inc.time, y0 = wt.spore.sum$mean.cfu, 
+#       y1 = wt.spore.sum$mean.cfu + wt.spore.sum$sem.cfu, 
+#       angle = 90, length = 0.1, lwd = 2, col = "lightblue")
+#arrows(x0 = wt.spore.sum$inc.time, y0 = wt.spore.sum$mean.cfu, 
+#       y1 = wt.spore.sum$mean.cfu - wt.spore.sum$sem.cfu, 
+#       angle = 90, length = 0.1, lwd = 2, col = "lightblue")
+
+# Make plot for wild type mutant
+lines(mut.veg.sum$time, mut.veg.sum$mean.cfu, 
+      col = "red", lty = 1, lwd = 2)
+points(mut.veg.sum$time, mut.veg.sum$mean.cfu, pch = 16, col = "red") 
+#arrows(x0 = mut.veg.sum$inc.time, y0 = mut.veg.sum$mean.cfu, 
+#       y1 = mut.veg.sum$mean.cfu + mut.veg.sum$sem.cfu, 
+#       angle = 90, length = 0.1, lwd = 2, col = "red")
+#arrows(x0 = mut.veg.sum$inc.time, y0 = mut.veg.sum$mean.cfu, 
+#       y1 = mut.veg.sum$mean.cfu - mut.veg.sum$sem.cfu, 
+#       angle = 90, length = 0.1, lwd = 2, col = "red")
+
+# Add box around plot
+box(lwd = 2)
+
+# Add axis ticks and labels
+axis(2, at = c(1e3, 1e4, 1e5, 1e6,1e7, 1e8, 1e9), cex.axis = 1.25,
+      labels = expression(10^3, 10^4, 10^5, 10^6, 10^7, 10^8, 10^9), las = 1)
+
+axis(4, labels = F, lwd.ticks = 2, las = 1, cex.axis = 1.25,
+      at = c(10^3, 10^4, 10^5, 10^6, 10^7, 10^8, 10^9))
+
+axis(side = 1, lwd.ticks = 2, cex.axis = 1.25, las = 1, mgp = c(1, 1, 0),
+    labels = c("0", "5", "10", "15"), at = c(0, 5, 10, 15))
+
+axis(side = 3, labels = F, lwd.ticks = 2, las = 1, cex.axis = 1, 
+   at = c(0, 5, 10, 15))
+
+
+# Add axis labels
+mtext('CFU (#/mL)', side = 2, outer = TRUE, cex = 1.5, 
+      line = -3.5, adj = 0.55)
+
+mtext('Time (h)', side = 1, outer = TRUE, cex = 1.5, 
+      line = -4, adj = 0.5)
+
+# Add a legend
+legend("bottomright", legend = c("wild type: vegetative", 
+      "wildtype: spore", "mutant = vegetative"), 
+       col = c("blue","lightblue", "red"), lty = 1, 
+       cex = 1, bty = "n", bg = "transparent", seg.len = 1.25, lwd = 1.5)
+
+
+# Close plot device (completes writing of file)
+dev.off()
+graphics.off()
+
+# Shows plot in R console window
+img <- readPNG("figures/CFU_20240811.png")
+grid.raster(img)
+```
+
+
+
